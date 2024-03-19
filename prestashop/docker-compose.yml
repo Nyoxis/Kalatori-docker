@@ -1,0 +1,65 @@
+version: '3'
+services:
+  mysql:
+    container_name: some-mysql
+    image: mysql:5.7
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: prestashop
+    networks:
+      - prestashop_network
+  prestashop:
+    container_name: prestashop
+    image: prestashop/prestashop:8.1.4
+    depends_on:
+      - mysql
+    ports:
+      - 8080:80
+    environment:
+      PS_INSTALL_AUTO: 1
+      DB_SERVER: some-mysql
+      DB_NAME: prestashop
+      DB_USER: root
+      DB_PASSWD: admin
+    networks:
+      - prestashop_network
+    volumes:
+      - type: bind
+        source: ./modules/ps_dotpayment # local path to the module
+        target: /var/www/html/modules/ps_dotpayment # path to be mounted in the container
+  kalatori:
+    container_name: kalatori-daemon
+    ports:
+      - 16726:16726
+    volumes:
+      - type: bind
+        source: ./Kalatori-backend/start.sh
+        target: /Kalatori-backend/start.sh
+    build:
+      dockerfile_inline: |
+        FROM --platform=linux/amd64 ubuntu
+        ADD ./Kalatori-backend/kalatori /Kalatori-backend/kalatori
+        ADD --chmod=+x ./Kalatori-backend/start.sh /Kalatori-backend/start.sh
+        EXPOSE 16726
+        WORKDIR /Kalatori-backend
+        CMD ["./start.sh"]
+    networks:
+      - prestashop_network
+  chopsticks:
+    container_name: chopsticks-node
+    ports:
+      - 8000:8000
+    volumes:
+      - type: bind
+        source: ./chopsticks/pd.yml
+        target: /chopsticks/pd.yml
+    build:
+      dockerfile_inline: |
+        FROM --platform=linux/amd64 node
+        EXPOSE 8000
+        CMD npx @acala-network/chopsticks@latest -c /chopsticks/pd.yml
+    networks:
+      - prestashop_network
+networks:
+    prestashop_network:
